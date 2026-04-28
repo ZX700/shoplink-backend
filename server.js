@@ -5,7 +5,13 @@ import cors from "cors";
 const app = express();
 
 // ✅ MIDDLEWARE
-app.use(cors());
+app.use(cors({
+  origin: [
+    "http://localhost:3000",
+    "https://shoplink-frontend-ashen.vercel.app"
+  ],
+  credentials: true
+}));
 app.use(express.json());
 
 // ✅ CONNECT TO MONGODB
