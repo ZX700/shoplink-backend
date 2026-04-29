@@ -4,23 +4,34 @@ import cors from "cors";
 
 const app = express();
 
+// =========================
 // ✅ MIDDLEWARE
-app.use(cors({
-  origin: [
-    "http://localhost:3000",
-    "https://shoplink-frontend-ashen.vercel.app"
-  ],
-  credentials: true
-}));
+// =========================
+app.use(
+  cors({
+    origin: [
+      "http://localhost:3000",
+      "https://shoplink-frontend-ashen.vercel.app",
+    ],
+    credentials: true,
+  })
+);
+
 app.use(express.json());
 
-// ✅ CONNECT TO MONGODB
+// =========================
+// ✅ MONGODB CONNECTION
+// =========================
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => console.log("MongoDB connected"))
   .catch((err) => console.error("MongoDB error:", err));
 
-// ✅ USER SCHEMA
+// =========================
+// ✅ SCHEMAS
+// =========================
+
+// USER
 const userSchema = new mongoose.Schema({
   email: { type: String, unique: true },
   password: String,
@@ -28,7 +39,7 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model("User", userSchema);
 
-// ✅ PRODUCT SCHEMA
+// PRODUCT
 const productSchema = new mongoose.Schema({
   id: Number,
   name: String,
@@ -39,11 +50,28 @@ const productSchema = new mongoose.Schema({
 
 const Product = mongoose.model("Product", productSchema);
 
+// ORDER ✅ (THIS WAS MISSING BEFORE)
+const orderSchema = new mongoose.Schema({
+  productId: String,
+  paymentMethod: String,
+  userEmail: String,
+  status: {
+    type: String,
+    default: "pending",
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
+});
+
+const Order = mongoose.model("Order", orderSchema);
+
 // =========================
 // 🔐 AUTH ROUTES
 // =========================
 
-// ✅ SIGNUP
+// SIGNUP
 app.post("/api/auth/signup", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -53,6 +81,7 @@ app.post("/api/auth/signup", async (req, res) => {
     }
 
     const existingUser = await User.findOne({ email });
+
     if (existingUser) {
       return res.status(400).json({ error: "User already exists" });
     }
@@ -67,7 +96,7 @@ app.post("/api/auth/signup", async (req, res) => {
   }
 });
 
-// ✅ LOGIN
+// LOGIN
 app.post("/api/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -96,7 +125,6 @@ app.post("/api/auth/login", async (req, res) => {
 // 📦 PRODUCT ROUTES
 // =========================
 
-// GET ALL PRODUCTS
 app.get("/api/products", async (req, res) => {
   try {
     const products = await Product.find();
@@ -107,7 +135,37 @@ app.get("/api/products", async (req, res) => {
 });
 
 // =========================
-// 🌱 SEED ROUTE (OPTIONAL)
+// 🛒 ORDER ROUTE (FIXED)
+// =========================
+
+app.post("/api/orders", async (req, res) => {
+  try {
+    const { productId, paymentMethod, userEmail } = req.body;
+
+    if (!productId || !userEmail) {
+      return res.status(400).json({ error: "Missing fields" });
+    }
+
+    const order = new Order({
+      productId,
+      paymentMethod,
+      userEmail,
+    });
+
+    await order.save();
+
+    res.status(201).json({
+      message: "Order placed successfully",
+      order,
+    });
+  } catch (err) {
+    console.error("ORDER ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// =========================
+// 🌱 SEED DATA
 // =========================
 
 app.get("/api/seed", async (req, res) => {
