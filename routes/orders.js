@@ -1,49 +1,58 @@
-const express = require("express");
-const Order = require("../models/Order");
+import express from "express";
+import mongoose from "mongoose";
 
 const router = express.Router();
 
 // -------------------------
-// GET ALL ORDERS
+// ORDER SCHEMA
 // -------------------------
-router.get("/", async (req, res) => {
-  try {
-    const orders = await Order.find().sort({ createdAt: -1 });
-    res.json(orders);
-  } catch (err) {
-    res.status(500).json({ error: "Failed to fetch orders" });
-  }
+const orderSchema = new mongoose.Schema({
+  productId: String,
+  paymentMethod: String,
+  userEmail: String,
+  status: {
+    type: String,
+    default: "pending",
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
 });
 
+const Order = mongoose.model("Order", orderSchema);
+
 // -------------------------
-// CREATE ORDER (MISSING BEFORE)
+// CREATE ORDER
 // -------------------------
 router.post("/", async (req, res) => {
   try {
     const { productId, paymentMethod, userEmail } = req.body;
 
+    console.log("ORDER BODY:", req.body);
+
     if (!productId || !userEmail) {
-      return res.status(400).json({ error: "Missing required fields" });
+      return res.status(400).json({
+        error: "Missing productId or userEmail",
+      });
     }
 
-    const newOrder = new Order({
+    const order = new Order({
       productId,
       paymentMethod,
       userEmail,
-      status: "pending",
-      createdAt: new Date(),
     });
 
-    await newOrder.save();
+    await order.save();
 
     res.status(201).json({
-      message: "Order created successfully",
-      order: newOrder,
+      message: "Order placed successfully",
+      order,
     });
   } catch (err) {
-    console.log("ORDER ERROR:", err);
-    res.status(500).json({ error: "Server error creating order" });
+    console.log(err);
+    res.status(500).json({ error: "Server error" });
   }
 });
 
-module.exports = router;
+export default router;
