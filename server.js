@@ -72,6 +72,35 @@ app.post("/api/auth/login", async (req, res) => {
 
   res.json({ user: { email } });
 });
+// =========================
+// SIGNUP (ADD THIS)
+// =========================
+app.post("/api/auth/signup", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: "Missing fields" });
+    }
+
+    const existingUser = await User.findOne({ email });
+
+    if (existingUser) {
+      return res.status(400).json({ error: "User already exists" });
+    }
+
+    const newUser = new User({ email, password });
+    await newUser.save();
+
+    res.json({
+      message: "Signup successful",
+      user: { email: newUser.email },
+    });
+  } catch (err) {
+    console.error("SIGNUP ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
 
 // =========================
 // PRODUCTS
