@@ -2,14 +2,15 @@ import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
 import dotenv from "dotenv";
-import jwt from "jsonwebtoken";
+import Stripe from "stripe";
 
 dotenv.config();
 
 const app = express();
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 // =========================
-// CORS
+// MIDDLEWARE
 // =========================
 app.use(
   cors({
@@ -21,45 +22,31 @@ app.use(
   })
 );
 
-// =========================
-// MIDDLEWARE
-// =========================
 app.use(express.json());
 
 // =========================
-// DEBUG
+// DEBUG (safe for prod)
 // =========================
-console.log("API URL READY");
-console.log("MONGO URI EXISTS:", !!process.env.MONGO_URI);
+console.log("🚀 Server starting...");
+console.log("Mongo URI exists:", !!process.env.MONGO_URI);
+console.log("Stripe key exists:", !!process.env.STRIPE_SECRET_KEY);
 
 // =========================
-// DATABASE
+// DATABASE CONNECTION
 // =========================
 mongoose
   .connect(process.env.MONGO_URI)
-  .then(() => {
-    console.log("✅ MongoDB connected");
-  })
-  .catch((err) => {
-    console.error("❌ MongoDB error:", err);
-  });
+  .then(() => console.log("✅ MongoDB connected"))
+  .catch((err) => console.error("❌ MongoDB error:", err));
 
 // =========================
-// SCHEMAS
+// MODELS
 // =========================
-
-// USER
 const userSchema = new mongoose.Schema({
-  email: {
-    type: String,
-    unique: true,
-  },
+  email: { type: String, unique: true },
   password: String,
 });
 
-const User = mongoose.model("User", userSchema);
-
-// PRODUCT
 const productSchema = new mongoose.Schema({
   id: Number,
   name: String,
@@ -67,77 +54,30 @@ const productSchema = new mongoose.Schema({
   category: String,
 });
 
-const Product = mongoose.model("Product", productSchema);
-
-// ORDER
 const orderSchema = new mongoose.Schema({
   productId: String,
   userEmail: String,
   paymentMethod: String,
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
+  paymentStatus: { type: String, default: "pending" },
+  stripeSessionId: String,
+  createdAt: { type: Date, default: Date.now },
 });
 
+const User = mongoose.model("User", userSchema);
+const Product = mongoose.model("Product", productSchema);
 const Order = mongoose.model("Order", orderSchema);
 
 // =========================
-// ROOT ROUTE
+// ROOT
 // =========================
 app.get("/", (req, res) => {
-  res.send("Backend running");
+  res.send("API running");
 });
 
 // =========================
-// SIGNUP
+// AUTH (SIMPLE)
 // =========================
 app.post("/api/auth/signup", async (req, res) => {
-  try {
-    console.log("SIGNUP BODY:", req.body);
-
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({
-        error: "Missing fields",
-      });
-    }
-
-    const existingUser = await User.findOne({ email });
-
-    if (existingUser) {
-      return res.status(400).json({
-        error: "User already exists",
-      });
-    }
-
-    const newUser = new User({
-      email,
-      password,
-    });
-
-    await newUser.save();
-
-    res.json({
-      message: "Signup successful",
-      user: {
-        email: newUser.email,
-      },
-    });
-  } catch (err) {
-    console.error("SIGNUP ERROR:", err);
-
-    res.status(500).json({
-      error: "Server error",
-    });
-  }
-});
-
-// =========================
-// LOGIN
-// =========================
-app.post("/api/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -145,80 +85,116 @@ app.post("/api/auth/login", async (req, res) => {
       return res.status(400).json({ error: "Missing fields" });
     }
 
+    const exists = await User.findOne({ email });
+
+    if (exists) {
+      return res.status(400).json({ error: "User exists" });
+    }
+
+    const user = await User.create({ email, password });
+
+    res.json({
+      message: "Signup successful",
+      user: { email: user.email },
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.post("/api/auth/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
     const user = await User.findOne({ email });
 
     if (!user || user.password !== password) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    // ✅ CREATE TOKEN
-    const token = jwt.sign(
-      { email: user.email },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
     res.json({
       message: "Login successful",
-      token,
-      user: {
-        email: user.email,
-      },
+      user: { email: user.email },
     });
   } catch (err) {
-    console.error("LOGIN ERROR:", err);
+    console.error(err);
     res.status(500).json({ error: "Server error" });
   }
 });
+
 // =========================
 // PRODUCTS
 // =========================
 app.get("/api/products", async (req, res) => {
   try {
     const products = await Product.find();
-
     res.json(products);
   } catch (err) {
-    console.error("PRODUCT ERROR:", err);
-
-    res.status(500).json({
-      error: "Server error",
-    });
+    res.status(500).json({ error: "Failed to fetch products" });
   }
 });
 
 // =========================
-// ORDERS
+// STRIPE CHECKOUT (OPTIMIZED)
 // =========================
-app.post("/api/orders", async (req, res) => {
+app.post("/api/checkout", async (req, res) => {
   try {
-    console.log("ORDER BODY:", req.body);
+    const { product, userEmail } = req.body;
 
-    const { productId, userEmail, paymentMethod } = req.body;
-
-    if (!userEmail) {
-      return res.status(401).json({
-        error: "Login required",
-      });
+    if (!product) {
+      return res.status(400).json({ error: "Product missing" });
     }
 
-    const order = await Order.create({
-      productId,
-      userEmail,
-      paymentMethod,
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      mode: "payment",
+
+      line_items: [
+        {
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: product.name,
+              description: product.category,
+            },
+            unit_amount: Math.round(product.price * 100),
+          },
+          quantity: 1,
+        },
+      ],
+
+      success_url:
+        "https://shoplink-frontend-snowy.vercel.app/success",
+
+      cancel_url:
+        "https://shoplink-frontend-snowy.vercel.app/product/" +
+        product.id,
     });
 
-    res.json({
-      message: "Order placed",
-      order,
+    // 🔥 create pending order BEFORE payment
+    await Order.create({
+      productId: product.id,
+      userEmail: userEmail || "guest",
+      paymentMethod: "stripe",
+      stripeSessionId: session.id,
+      paymentStatus: "pending",
     });
+
+    // ✅ CRITICAL LINE
+    return res.json({ url: session.url });
   } catch (err) {
-    console.error("ORDER ERROR:", err);
-
-    res.status(500).json({
-      error: "Server error",
-    });
+    console.error("CHECKOUT ERROR:", err);
+    res.status(500).json({ error: "Checkout failed" });
   }
+});
+
+// =========================
+// ORDERS (optional debug)
+// =========================
+app.get("/api/orders", async (req, res) => {
+  const orders = await Order.find();
+  res.json(orders);
 });
 
 // =========================
