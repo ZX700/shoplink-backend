@@ -8,37 +8,57 @@ dotenv.config();
 const app = express();
 
 // =========================
-// CORS (MUST BE FIRST)
+// CORS
 // =========================
 app.use(
   cors({
     origin: [
+      "http://localhost:3000",
       "https://shoplink-frontend-snowy.vercel.app",
     ],
     credentials: true,
   })
 );
 
+// =========================
+// MIDDLEWARE
+// =========================
 app.use(express.json());
 
 // =========================
-// DB
+// DEBUG
+// =========================
+console.log("API URL READY");
+console.log("MONGO URI EXISTS:", !!process.env.MONGO_URI);
+
+// =========================
+// DATABASE
 // =========================
 mongoose
   .connect(process.env.MONGO_URI)
-  .then(() => console.log("MongoDB connected"))
-  .catch((err) => console.error(err));
+  .then(() => {
+    console.log("✅ MongoDB connected");
+  })
+  .catch((err) => {
+    console.error("❌ MongoDB error:", err);
+  });
 
 // =========================
 // SCHEMAS
 // =========================
+
+// USER
 const userSchema = new mongoose.Schema({
-  email: String,
+  email: {
+    type: String,
+    unique: true,
+  },
   password: String,
 });
 
 const User = mongoose.model("User", userSchema);
 
+// PRODUCT
 const productSchema = new mongoose.Schema({
   id: Number,
   name: String,
@@ -48,56 +68,106 @@ const productSchema = new mongoose.Schema({
 
 const Product = mongoose.model("Product", productSchema);
 
+// ORDER
 const orderSchema = new mongoose.Schema({
   productId: String,
   userEmail: String,
   paymentMethod: String,
-  createdAt: { type: Date, default: Date.now },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
 });
 
 const Order = mongoose.model("Order", orderSchema);
 
 // =========================
-// AUTH
+// ROOT ROUTE
 // =========================
-app.post("/api/auth/login", async (req, res) => {
-  const { email, password } = req.body;
-
-  const user = await User.findOne({ email });
-
-  if (!user || user.password !== password) {
-    return res.status(401).json({ error: "Invalid credentials" });
-  }
-
-  res.json({ user: { email } });
+app.get("/", (req, res) => {
+  res.send("Backend running");
 });
+
 // =========================
-// SIGNUP (ADD THIS)
+// SIGNUP
 // =========================
 app.post("/api/auth/signup", async (req, res) => {
   try {
+    console.log("SIGNUP BODY:", req.body);
+
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ error: "Missing fields" });
+      return res.status(400).json({
+        error: "Missing fields",
+      });
     }
 
     const existingUser = await User.findOne({ email });
 
     if (existingUser) {
-      return res.status(400).json({ error: "User already exists" });
+      return res.status(400).json({
+        error: "User already exists",
+      });
     }
 
-    const newUser = new User({ email, password });
+    const newUser = new User({
+      email,
+      password,
+    });
+
     await newUser.save();
 
     res.json({
       message: "Signup successful",
-      user: { email: newUser.email },
+      user: {
+        email: newUser.email,
+      },
     });
   } catch (err) {
     console.error("SIGNUP ERROR:", err);
-    res.status(500).json({ error: "Server error" });
+
+    res.status(500).json({
+      error: "Server error",
+    });
+  }
+});
+
+// =========================
+// LOGIN
+// =========================
+app.post("/api/auth/login", async (req, res) => {
+  try {
+    console.log("LOGIN BODY:", req.body);
+
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        error: "Missing fields",
+      });
+    }
+
+    const user = await User.findOne({ email });
+
+    if (!user || user.password !== password) {
+      return res.status(401).json({
+        error: "Invalid credentials",
+      });
+    }
+
+    res.json({
+      message: "Login successful",
+      user: {
+        email: user.email,
+      },
+    });
+  } catch (err) {
+    console.error("LOGIN ERROR:", err);
+
+    res.status(500).json({
+      error: "Server error",
+    });
   }
 });
 
@@ -105,34 +175,58 @@ app.post("/api/auth/signup", async (req, res) => {
 // PRODUCTS
 // =========================
 app.get("/api/products", async (req, res) => {
-  const products = await Product.find();
-  res.json(products);
+  try {
+    const products = await Product.find();
+
+    res.json(products);
+  } catch (err) {
+    console.error("PRODUCT ERROR:", err);
+
+    res.status(500).json({
+      error: "Server error",
+    });
+  }
 });
 
 // =========================
 // ORDERS
 // =========================
 app.post("/api/orders", async (req, res) => {
-  const { productId, userEmail, paymentMethod } = req.body;
+  try {
+    console.log("ORDER BODY:", req.body);
 
-  if (!userEmail) {
-    return res.status(401).json({ error: "Login required" });
+    const { productId, userEmail, paymentMethod } = req.body;
+
+    if (!userEmail) {
+      return res.status(401).json({
+        error: "Login required",
+      });
+    }
+
+    const order = await Order.create({
+      productId,
+      userEmail,
+      paymentMethod,
+    });
+
+    res.json({
+      message: "Order placed",
+      order,
+    });
+  } catch (err) {
+    console.error("ORDER ERROR:", err);
+
+    res.status(500).json({
+      error: "Server error",
+    });
   }
-
-  const order = await Order.create({
-    productId,
-    userEmail,
-    paymentMethod,
-  });
-
-  res.json({ message: "Order placed", order });
 });
 
 // =========================
-// START SERVER
+// SERVER
 // =========================
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
-  console.log(`Server running on ${PORT}`);
+  console.log(`✅ Server running on port ${PORT}`);
 });
