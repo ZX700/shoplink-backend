@@ -2,6 +2,7 @@ import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
 import dotenv from "dotenv";
+import jwt from "jsonwebtoken";
 
 dotenv.config();
 
@@ -138,39 +139,37 @@ app.post("/api/auth/signup", async (req, res) => {
 // =========================
 app.post("/api/auth/login", async (req, res) => {
   try {
-    console.log("LOGIN BODY:", req.body);
-
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({
-        error: "Missing fields",
-      });
+      return res.status(400).json({ error: "Missing fields" });
     }
 
     const user = await User.findOne({ email });
 
     if (!user || user.password !== password) {
-      return res.status(401).json({
-        error: "Invalid credentials",
-      });
+      return res.status(401).json({ error: "Invalid credentials" });
     }
+
+    // ✅ CREATE TOKEN
+    const token = jwt.sign(
+      { email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
 
     res.json({
       message: "Login successful",
+      token,
       user: {
         email: user.email,
       },
     });
   } catch (err) {
     console.error("LOGIN ERROR:", err);
-
-    res.status(500).json({
-      error: "Server error",
-    });
+    res.status(500).json({ error: "Server error" });
   }
 });
-
 // =========================
 // PRODUCTS
 // =========================
