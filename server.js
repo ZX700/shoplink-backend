@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import authRoutes from "./routes/auth.js";
 import checkoutRoutes from "./routes/checkout.js";
 import orderRoutes from "./routes/orders.js";
+import productRoutes from "./routes/products.js";
 import webhookRoutes from "./routes/webhook.js";
 
 import { authMiddleware } from "./middleware/auth.js";
@@ -58,6 +59,7 @@ mongoose
 // =========================
 app.use("/api/auth", authRoutes);
 app.use("/api/checkout", checkoutRoutes);
+app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);
 
 // =========================
