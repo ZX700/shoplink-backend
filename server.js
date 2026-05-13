@@ -8,7 +8,7 @@ import checkoutRoutes from "./routes/checkout.js";
 import orderRoutes from "./routes/orders.js";
 import webhookRoutes from "./routes/webhook.js";
 
-import { authMiddleware } from "./middleware/middleware.js";
+import { authMiddleware } from "./middleware/auth.js";
 
 dotenv.config();
 
