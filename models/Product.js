@@ -1,21 +1,36 @@
-const mongoose = require("mongoose");
+import mongoose from "mongoose";
 
 const productSchema = new mongoose.Schema(
   {
     name: {
       type: String,
       required: true,
+      trim: true,
     },
+
     price: {
       type: Number,
       required: true,
+      min: 0,
     },
+
     image: {
-      type: String, // Cloudinary URL
+      type: String,
       required: true,
+      trim: true,
+    },
+
+    category: {
+      type: String,
+      default: "General",
+      trim: true,
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
-module.exports = mongoose.model("Product", productSchema);
+const Product = mongoose.model("Product", productSchema);
+
+export default Product;

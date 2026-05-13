@@ -1,39 +1,99 @@
-const express = require("express");
-const Stripe = require("stripe");
-const Order = require("../models/Order");
+import express from "express";
+import Stripe from "stripe";
+import Order from "../models/Order.js";
 
 const router = express.Router();
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
+const stripe = new Stripe(
+  process.env.STRIPE_SECRET_KEY
+);
+
+// =========================
+// STRIPE WEBHOOK
+// =========================
 router.post(
   "/",
   express.raw({ type: "application/json" }),
   async (req, res) => {
-    const sig = req.headers["stripe-signature"];
+    const signature = req.headers["stripe-signature"];
 
     let event;
 
     try {
       event = stripe.webhooks.constructEvent(
         req.body,
-        sig,
+        signature,
         process.env.STRIPE_WEBHOOK_SECRET
       );
     } catch (err) {
-      return res.status(400).send(`Webhook Error: ${err.message}`);
-    }
+      console.error(
+        "❌ WEBHOOK SIGNATURE ERROR:",
+        err.message
+      );
 
-    if (event.type === "checkout.session.completed") {
-      const session = event.data.object;
-
-      await Order.findOneAndUpdate(
-        { stripeSessionId: session.id },
-        { paymentStatus: "paid" }
+      return res.status(400).send(
+        `Webhook Error: ${err.message}`
       );
     }
 
-    res.json({ received: true });
+    try {
+      // =========================
+      // PAYMENT SUCCESS EVENT
+      // =========================
+      if (
+        event.type ===
+        "checkout.session.completed"
+      ) {
+        const session = event.data.object;
+
+        console.log(
+          "💰 PAYMENT SUCCESS:",
+          session.id
+        );
+
+        const updatedOrder =
+          await Order.findOneAndUpdate(
+            {
+              stripeSessionId: session.id,
+            },
+            {
+              paymentStatus: "paid",
+            },
+            {
+              new: true,
+            }
+          );
+
+        // =========================
+        // DEBUG SAFETY CHECK
+        // =========================
+        if (!updatedOrder) {
+          console.warn(
+            "⚠️ No order found for session:",
+            session.id
+          );
+        } else {
+          console.log(
+            "✅ ORDER UPDATED:",
+            updatedOrder._id
+          );
+        }
+      }
+
+      return res.json({
+        received: true,
+      });
+    } catch (err) {
+      console.error(
+        "❌ WEBHOOK PROCESSING ERROR:",
+        err
+      );
+
+      return res.status(500).json({
+        error: "Webhook processing failed",
+      });
+    }
   }
 );
 
-module.exports = router;
+export default router;

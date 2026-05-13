@@ -1,45 +1,119 @@
+import express from "express";
 import Stripe from "stripe";
+import Order from "../models/Order.js";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const router = express.Router();
 
-app.post("/api/checkout", async (req, res) => {
+const stripe = new Stripe(
+  process.env.STRIPE_SECRET_KEY
+);
+
+// =========================
+// CREATE CHECKOUT SESSION
+// =========================
+router.post("/", async (req, res) => {
   try {
-    const { product } = req.body;
+    const { product, userEmail } = req.body;
 
-    if (!product) {
-      return res.status(400).json({ error: "Product missing" });
+    console.log("🛒 CHECKOUT BODY:", req.body);
+
+    // =========================
+    // VALIDATION
+    // =========================
+    if (
+      !product ||
+      !product.name ||
+      !product.price
+    ) {
+      return res.status(400).json({
+        error: "Invalid product data",
+      });
     }
 
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
+    // FIX ID CONSISTENCY
+    const productId =
+      product.id || product._id || "unknown";
 
-      mode: "payment",
+    // =========================
+    // STRIPE SESSION
+    // =========================
+    const session =
+      await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
 
-      line_items: [
-        {
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: product.name,
-              description: product.category,
+        mode: "payment",
+
+        line_items: [
+          {
+            price_data: {
+              currency: "usd",
+
+              product_data: {
+                name: product.name,
+
+                description:
+                  product.category || "Product",
+              },
+
+              unit_amount: Math.round(
+                product.price * 100
+              ),
             },
-            unit_amount: Math.round(product.price * 100),
+
+            quantity: 1,
           },
-          quantity: 1,
+        ],
+
+        success_url:
+          "https://shoplink-frontend-snowy.vercel.app/success",
+
+        cancel_url:
+          `https://shoplink-frontend-snowy.vercel.app/product/${productId}`,
+      });
+
+    // =========================
+    // CREATE PENDING ORDER
+    // =========================
+    await Order.create({
+      userEmail: userEmail || "guest",
+
+      items: [
+        {
+          productId,
+
+          name: product.name,
+
+          price: product.price,
+
+          qty: 1,
         },
       ],
 
-      success_url:
-        "https://shoplink-frontend-snowy.vercel.app/success",
+      total: product.price,
 
-      cancel_url:
-        "https://shoplink-frontend-snowy.vercel.app/product/" +
-        product._id,
+      stripeSessionId: session.id,
+
+      paymentMethod: "stripe",
+
+      paymentStatus: "pending",
     });
 
-    res.json({ url: session.url });
+    // =========================
+    // SEND STRIPE URL
+    // =========================
+    return res.json({
+      url: session.url,
+    });
   } catch (err) {
-    console.error("CHECKOUT ERROR:", err);
-    res.status(500).json({ error: "Checkout failed" });
+    console.error(
+      "❌ CHECKOUT ERROR:",
+      err
+    );
+
+    return res.status(500).json({
+      error: "Checkout failed",
+    });
   }
 });
+
+export default router;
