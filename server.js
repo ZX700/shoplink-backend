@@ -4,10 +4,10 @@ import cors from "cors";
 import dotenv from "dotenv";
 
 import authRoutes from "./routes/auth.js";
-import checkoutRoutes from "./routes/checkout.js";
+import checkoutRoute from "./routes/checkout.js";
 import orderRoutes from "./routes/orders.js";
 import productRoutes from "./routes/products.js";
-import webhookRoutes from "./routes/webhook.js";
+import webhookRoute from "./routes/webhook.js";
 
 import { authMiddleware } from "./middleware/auth.js";
 
@@ -16,11 +16,13 @@ dotenv.config();
 const app = express();
 
 // =========================
-// STRIPE WEBHOOK (RAW BODY MUST COME FIRST)
+// STRIPE WEBHOOK
+// MUST COME BEFORE express.json()
 // =========================
 app.use(
-  "/api/stripe/webhook",
-  webhookRoutes
+  "/api/webhook",
+  express.raw({ type: "application/json" }),
+  webhookRoute
 );
 
 // =========================
@@ -36,7 +38,7 @@ app.use(
   })
 );
 
-// IMPORTANT: JSON AFTER WEBHOOK
+// NORMAL JSON ROUTES
 app.use(express.json());
 
 // =========================
@@ -45,38 +47,70 @@ app.use(express.json());
 console.log("🚀 Server starting...");
 console.log("Mongo URI exists:", !!process.env.MONGO_URI);
 console.log("Stripe key exists:", !!process.env.STRIPE_SECRET_KEY);
+console.log("JWT exists:", !!process.env.JWT_SECRET);
 
 // =========================
 // DATABASE
 // =========================
 mongoose
   .connect(process.env.MONGO_URI)
-  .then(() => console.log("✅ MongoDB connected"))
-  .catch((err) => console.error("❌ MongoDB error:", err));
+  .then(() => {
+    console.log("✅ MongoDB connected");
+  })
+  .catch((err) => {
+    console.error("❌ MongoDB error:", err);
+  });
 
 // =========================
-// ROUTES
+// API ROUTES
 // =========================
 app.use("/api/auth", authRoutes);
-app.use("/api/checkout", checkoutRoutes);
+
 app.use("/api/products", productRoutes);
+
 app.use("/api/orders", orderRoutes);
 
+app.use("/api/checkout", checkoutRoute);
+
 // =========================
-// PROTECTED TEST ROUTE (OPTIONAL)
+// TEST PROTECTED ROUTE
 // =========================
-app.get("/api/protected", authMiddleware, (req, res) => {
-  res.json({
-    message: "You are authenticated",
-    user: req.user,
-  });
-});
+app.get(
+  "/api/protected",
+  authMiddleware,
+  (req, res) => {
+    res.json({
+      message: "Protected route works",
+      user: req.user,
+    });
+  }
+);
 
 // =========================
 // ROOT
 // =========================
 app.get("/", (req, res) => {
   res.send("API running");
+});
+
+// =========================
+// 404 HANDLER
+// =========================
+app.use((req, res) => {
+  res.status(404).json({
+    error: "Route not found",
+  });
+});
+
+// =========================
+// GLOBAL ERROR HANDLER
+// =========================
+app.use((err, req, res, next) => {
+  console.error("SERVER ERROR:", err);
+
+  res.status(500).json({
+    error: "Internal server error",
+  });
 });
 
 // =========================

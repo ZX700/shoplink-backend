@@ -19,9 +19,12 @@ router.post("/register", async (req, res) => {
       });
     }
 
+    // EMAIL NORMALIZATION
+    const normalizedEmail = email.toLowerCase();
+
     // CHECK EXISTING USER
     const existingUser = await User.findOne({
-      email,
+      email: normalizedEmail,
     });
 
     if (existingUser) {
@@ -39,7 +42,7 @@ router.post("/register", async (req, res) => {
     // CREATE USER
     const user = await User.create({
       name,
-      email,
+      email: normalizedEmail,
       password: hashedPassword,
     });
 
@@ -88,9 +91,12 @@ router.post("/login", async (req, res) => {
       });
     }
 
+    // EMAIL NORMALIZATION
+    const normalizedEmail = email.toLowerCase();
+
     // FIND USER
     const user = await User.findOne({
-      email,
+      email: normalizedEmail,
     });
 
     if (!user) {
