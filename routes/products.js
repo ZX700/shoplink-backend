@@ -5,49 +5,52 @@ import { authMiddleware } from "../middleware/auth.js";
 
 const router = express.Router();
 
-// =========================
-// GET ALL PRODUCTS
-// =========================
-router.get("/", async (req, res) => {
-  try {
-    const products = await Product.find();
-    res.json(products);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to fetch products" });
-  }
-});
-
-// =========================
-// UPLOAD PRODUCT (SELLER ONLY)
-// =========================
 router.post("/upload", authMiddleware, async (req, res) => {
   try {
-    const { name, price, image, description, category } = req.body;
+    const {
+      name,
+      price,
+      image,
+      description,
+      category,
+      storeName,
+      bankName,
+      accountNumber,
+      accountName,
+    } = req.body;
 
-    // validate input
-    if (!name || !price || !image) {
-      return res.status(400).json({
-        error: "Name, price, and image are required",
-      });
-    }
-
-    // get user from JWT
     const user = await User.findById(req.user.userId);
 
     if (!user) {
-      return res.status(401).json({
-        error: "User not found",
-      });
+      return res.status(401).json({ error: "User not found" });
     }
 
+    // 🔥 AUTO-UPGRADE USER TO SELLER
     if (!user.isSeller) {
-      return res.status(403).json({
-        error: "Seller account required",
-      });
+      user.isSeller = true;
+
+      user.sellerInfo = {
+        storeName: storeName || "",
+        bankName: bankName || "",
+        accountNumber: accountNumber || "",
+        accountName: accountName || "",
+      };
+
+      await user.save();
+    } else {
+      // optional update seller info
+      user.sellerInfo = {
+        storeName: storeName || user.sellerInfo?.storeName,
+        bankName: bankName || user.sellerInfo?.bankName,
+        accountNumber:
+          accountNumber || user.sellerInfo?.accountNumber,
+        accountName: accountName || user.sellerInfo?.accountName,
+      };
+
+      await user.save();
     }
 
-    // create product
+    // 🔥 CREATE PRODUCT
     const product = await Product.create({
       name,
       price,
@@ -55,18 +58,16 @@ router.post("/upload", authMiddleware, async (req, res) => {
       description,
       category,
       sellerId: user._id,
-      sellerName: user.storeName || user.name,
+      sellerName: user.sellerInfo?.storeName || user.name,
     });
 
     return res.status(201).json({
-      message: "Product uploaded",
+      message: "Product uploaded & user upgraded to seller",
       product,
     });
   } catch (err) {
     console.error("UPLOAD ERROR:", err);
-    return res.status(500).json({
-      error: "Server error",
-    });
+    return res.status(500).json({ error: "Server error" });
   }
 });
 
