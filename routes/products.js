@@ -1,28 +1,46 @@
-import express from "express";
+router.post(
+  "/upload",
+  authMiddleware,
+  async (req, res) => {
+    try {
+      const {
+        name,
+        price,
+        image,
+        description,
+        category,
+      } = req.body;
 
-const router = express.Router();
+      const user = await User.findById(
+        req.user.userId
+      );
 
-// TEMP SAMPLE DATA (replace with MongoDB later if needed)
-const products = [
-  {
-    id: 1,
-    name: "Sample Product 1",
-    price: 50,
-    category: "General",
-  },
-  {
-    id: 2,
-    name: "Sample Product 2",
-    price: 100,
-    category: "General",
-  },
-];
+      if (!user || !user.isSeller) {
+        return res.status(403).json({
+          error: "Seller account required",
+        });
+           }
 
-// =========================
-// GET PRODUCTS
-// =========================
-router.get("/", (req, res) => {
-  res.json(products);
-});
+      const product = await Product.create({
+        name,
+        price,
+        image,
+        description,
+        category,
+        sellerId: user._id,
+        sellerName: user.storeName,
+      });
 
-export default router;
+      res.status(201).json({
+        message: "Product uploaded",
+        product,
+      });
+    } catch (err) {
+      console.error(err);
+
+      res.status(500).json({
+        error: "Server error",
+      });
+    }
+  }
+);

@@ -7,6 +7,7 @@ import authRoutes from "./routes/auth.js";
 import checkoutRoute from "./routes/checkout.js";
 import orderRoutes from "./routes/orders.js";
 import productRoutes from "./routes/products.js";
+import sellerRoutes from "./routes/seller.js";
 import webhookRoute from "./routes/webhook.js";
 
 import { authMiddleware } from "./middleware/auth.js";
@@ -71,6 +72,8 @@ app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);
 
 app.use("/api/checkout", checkoutRoute);
+
+app.use("/api/seller", sellerRoutes);
 
 // =========================
 // TEST PROTECTED ROUTE
