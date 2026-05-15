@@ -2,24 +2,53 @@ import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema(
   {
-    name: String,
-    email: { type: String, unique: true },
-    password: String,
+    name: {
+      type: String,
+      default: "",
+    },
 
-    // NEW
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+    },
+
+    password: {
+      type: String,
+      required: true,
+    },
+
+    // =========================
+    // SELLER INFO
+    // =========================
     isSeller: {
       type: Boolean,
       default: false,
     },
 
-    sellerInfo: {
-      storeName: String,
-      bankName: String,
-      accountNumber: String,
-      accountName: String,
+    storeName: {
+      type: String,
+      default: "",
+    },
+
+    bankName: {
+      type: String,
+      default: "",
+    },
+
+    accountNumber: {
+      type: String,
+      default: "",
+    },
+
+    accountName: {
+      type: String,
+      default: "",
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
 export default mongoose.model("User", userSchema);

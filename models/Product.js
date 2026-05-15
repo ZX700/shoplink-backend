@@ -2,6 +2,9 @@ import mongoose from "mongoose";
 
 const productSchema = new mongoose.Schema(
   {
+    // =========================
+    // PRODUCT INFO
+    // =========================
     name: {
       type: String,
       required: true,
@@ -16,6 +19,7 @@ const productSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+
     description: {
       type: String,
       default: "",
@@ -23,20 +27,35 @@ const productSchema = new mongoose.Schema(
 
     category: {
       type: String,
-      default: "General",
+      default: "",
     },
 
     // =========================
-    // SELLER RELATION
+    // SELLER INFO
     // =========================
     sellerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
     },
+
     sellerName: {
       type: String,
-      required: true,
+      default: "",
+    },
+
+    bankName: {
+      type: String,
+      default: "",
+    },
+
+    accountNumber: {
+      type: String,
+      default: "",
+    },
+
+    accountName: {
+      type: String,
+      default: "",
     },
   },
   {
@@ -44,6 +63,7 @@ const productSchema = new mongoose.Schema(
   }
 );
 
-const Product = mongoose.model("Product", productSchema);
-
-export default Product;
+export default mongoose.model(
+  "Product",
+  productSchema
+);

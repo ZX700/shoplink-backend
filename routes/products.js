@@ -5,70 +5,121 @@ import { authMiddleware } from "../middleware/auth.js";
 
 const router = express.Router();
 
-router.post("/upload", authMiddleware, async (req, res) => {
+//
+// =========================
+// GET ALL PRODUCTS
+// =========================
+//
+router.get("/", async (req, res) => {
   try {
-    const {
-      name,
-      price,
-      image,
-      description,
-      category,
-      storeName,
-      bankName,
-      accountNumber,
-      accountName,
-    } = req.body;
-
-    const user = await User.findById(req.user.userId);
-
-    if (!user) {
-      return res.status(401).json({ error: "User not found" });
-    }
-
-    // 🔥 AUTO-UPGRADE USER TO SELLER
-    if (!user.isSeller) {
-      user.isSeller = true;
-
-      user.sellerInfo = {
-        storeName: storeName || "",
-        bankName: bankName || "",
-        accountNumber: accountNumber || "",
-        accountName: accountName || "",
-      };
-
-      await user.save();
-    } else {
-      // optional update seller info
-      user.sellerInfo = {
-        storeName: storeName || user.sellerInfo?.storeName,
-        bankName: bankName || user.sellerInfo?.bankName,
-        accountNumber:
-          accountNumber || user.sellerInfo?.accountNumber,
-        accountName: accountName || user.sellerInfo?.accountName,
-      };
-
-      await user.save();
-    }
-
-    // 🔥 CREATE PRODUCT
-    const product = await Product.create({
-      name,
-      price,
-      image,
-      description,
-      category,
-      sellerId: user._id,
-      sellerName: user.sellerInfo?.storeName || user.name,
+    const products = await Product.find().sort({
+      createdAt: -1,
     });
 
-    return res.status(201).json({
-      message: "Product uploaded & user upgraded to seller",
-      product,
-    });
+    res.json(products);
   } catch (err) {
-    console.error("UPLOAD ERROR:", err);
-    return res.status(500).json({ error: "Server error" });
+    console.error(err);
+
+    res.status(500).json({
+      error: "Server error",
+    });
   }
 });
+
+//
+// =========================
+// UPLOAD PRODUCT
+// =========================
+//
+router.post(
+  "/upload",
+  authMiddleware,
+  async (req, res) => {
+    try {
+      const {
+        name,
+        price,
+        image,
+        description,
+        category,
+
+        // seller info
+        storeName,
+        bankName,
+        accountNumber,
+        accountName,
+      } = req.body;
+
+      // =========================
+      // VALIDATION
+      // =========================
+      if (
+        !name ||
+        !price ||
+        !image
+      ) {
+        return res.status(400).json({
+          error: "Missing required fields",
+        });
+      }
+
+      // =========================
+      // FIND USER
+      // =========================
+      const user = await User.findById(
+        req.user.userId
+      );
+
+      if (!user) {
+        return res.status(404).json({
+          error: "User not found",
+        });
+      }
+
+      // =========================
+      // AUTO-CONVERT USER TO SELLER
+      // =========================
+      user.isSeller = true;
+
+      // store seller info on user profile
+      user.storeName = storeName;
+      user.bankName = bankName;
+      user.accountNumber = accountNumber;
+      user.accountName = accountName;
+
+      await user.save();
+
+      // =========================
+      // CREATE PRODUCT
+      // =========================
+      const product = await Product.create({
+        name,
+        price,
+        image,
+        description,
+        category,
+
+        sellerId: user._id,
+        sellerName: storeName,
+
+        bankName,
+        accountNumber,
+        accountName,
+      });
+
+      res.status(201).json({
+        message: "Product uploaded successfully",
+        product,
+      });
+
+    } catch (err) {
+      console.error(err);
+
+      res.status(500).json({
+        error: "Server error",
+      });
+    }
+  }
+);
 
 export default router;
