@@ -1,36 +1,9 @@
 import express from "express";
-import multer from "multer";
-import cloudinary from "cloudinary";
-import streamifier from "streamifier";
-
 import Product from "../models/Product.js";
 import User from "../models/User.js";
-
 import { authMiddleware } from "../middleware/auth.js";
 
 const router = express.Router();
-
-//
-// =========================
-// CLOUDINARY CONFIG
-// =========================
-//
-cloudinary.v2.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
-
-//
-// =========================
-// MULTER MEMORY STORAGE
-// =========================
-//
-const storage = multer.memoryStorage();
-
-const upload = multer({
-  storage,
-});
 
 //
 // =========================
@@ -44,6 +17,35 @@ router.get("/", async (req, res) => {
     });
 
     res.json(products);
+
+  } catch (err) {
+    console.error(err);
+
+    res.status(500).json({
+      error: "Server error",
+    });
+  }
+});
+
+//
+// =========================
+// GET SINGLE PRODUCT
+// =========================
+//
+router.get("/:id", async (req, res) => {
+  try {
+    const product = await Product.findById(
+      req.params.id
+    );
+
+    if (!product) {
+      return res.status(404).json({
+        error: "Product not found",
+      });
+    }
+
+    res.json(product);
+
   } catch (err) {
     console.error(err);
 
@@ -61,34 +63,30 @@ router.get("/", async (req, res) => {
 router.post(
   "/upload",
   authMiddleware,
-  upload.single("image"),
   async (req, res) => {
     try {
       const {
         name,
         price,
+        image,
         description,
         category,
+
+        // seller
+        storeName,
+        sellerName,
+        bankName,
+        accountNumber,
+        accountName,
+        phoneNumber,
       } = req.body;
 
-      // =========================
-      // VALIDATION
-      // =========================
-      if (!name || !price) {
+      if (!name || !price || !image) {
         return res.status(400).json({
-          error: "Missing fields",
+          error: "Missing required fields",
         });
       }
 
-      if (!req.file) {
-        return res.status(400).json({
-          error: "Image is required",
-        });
-      }
-
-      // =========================
-      // FIND USER
-      // =========================
       const user = await User.findById(
         req.user.userId
       );
@@ -99,70 +97,142 @@ router.post(
         });
       }
 
-      // =========================
-      // AUTO ACTIVATE SELLER
-      // =========================
+      // auto seller
       user.isSeller = true;
+
+      user.storeName = storeName;
+      user.bankName = bankName;
+      user.accountNumber = accountNumber;
+      user.accountName = accountName;
+      user.phoneNumber = phoneNumber;
 
       await user.save();
 
-      // =========================
-      // CLOUDINARY STREAM UPLOAD
-      // =========================
-      const streamUpload = () => {
-        return new Promise((resolve, reject) => {
-          const stream =
-            cloudinary.v2.uploader.upload_stream(
-              {
-                folder: "shoplink-products",
-              },
-
-              (error, result) => {
-                if (result) {
-                  resolve(result);
-                } else {
-                  reject(error);
-                }
-              }
-            );
-
-          streamifier.createReadStream(req.file.buffer)
-            .pipe(stream);
-        });
-      };
-
-      const result = await streamUpload();
-
-      // =========================
-      // CREATE PRODUCT
-      // =========================
       const product = await Product.create({
         name,
         price,
+        image,
         description,
         category,
 
-        image: result.secure_url,
-
         sellerId: user._id,
-        sellerName:
-          user.name || user.email,
+
+        sellerName,
+        storeName,
+        bankName,
+        accountNumber,
+        accountName,
+        phoneNumber,
       });
 
-      // =========================
-      // RESPONSE
-      // =========================
       res.status(201).json({
-        message:
-          "Product uploaded successfully",
+        message: "Product uploaded successfully",
         product,
       });
 
     } catch (err) {
-      console.error(
-        "PRODUCT UPLOAD ERROR:",
-        err
+      console.error(err);
+
+      res.status(500).json({
+        error: "Server error",
+      });
+    }
+  }
+);
+
+//
+// =========================
+// UPDATE PRODUCT
+// =========================
+//
+router.put(
+  "/:id",
+  authMiddleware,
+  async (req, res) => {
+    try {
+      const product = await Product.findById(
+        req.params.id
       );
+
+      if (!product) {
+        return res.status(404).json({
+          error: "Product not found",
+        });
+      }
+
+      // only seller owner can edit
+      if (
+        String(product.sellerId) !==
+        String(req.user.userId)
+      ) {
+        return res.status(403).json({
+          error: "Unauthorized",
+        });
+      }
+
+      const updated = await Product.findByIdAndUpdate(
+        req.params.id,
+        req.body,
+        {
+          new: true,
+        }
+      );
+
+      res.json({
+        message: "Product updated",
+        product: updated,
+      });
+
+    } catch (err) {
+      console.error(err);
+
+      res.status(500).json({
+        error: "Server error",
+      });
+    }
+  }
+);
+
+//
+// =========================
+// DELETE PRODUCT
+// =========================
+//
+router.delete(
+  "/:id",
+  authMiddleware,
+  async (req, res) => {
+    try {
+      const product = await Product.findById(
+        req.params.id
+      );
+
+      if (!product) {
+        return res.status(404).json({
+          error: "Product not found",
+        });
+      }
+
+      // only seller owner can delete
+      if (
+        String(product.sellerId) !==
+        String(req.user.userId)
+      ) {
+        return res.status(403).json({
+          error: "Unauthorized",
+        });
+      }
+
+      await Product.findByIdAndDelete(
+        req.params.id
+      );
+
+      res.json({
+        message: "Product deleted successfully",
+      });
+
+    } catch (err) {
+      console.error(err);
 
       res.status(500).json({
         error: "Server error",
