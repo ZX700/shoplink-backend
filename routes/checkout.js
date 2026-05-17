@@ -1,7 +1,7 @@
 import express from "express";
 import Stripe from "stripe";
-import { authMiddleware } from "../middleware/auth.js";
 import Order from "../models/Order.js";
+import { authMiddleware } from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -9,112 +9,78 @@ const stripe = new Stripe(
   process.env.STRIPE_SECRET_KEY
 );
 
-//
-// =========================
-// STRIPE CHECKOUT
-// =========================
-//
 router.post(
   "/",
   authMiddleware,
   async (req, res) => {
-  try {
-    const { items } = req.body;
+    try {
+      const { product, userEmail } =
+        req.body;
 
-    console.log("CHECKOUT BODY:", req.body);
+      if (!product) {
+        return res.status(400).json({
+          error: "No product provided",
+        });
+      }
 
-    // =========================
-    // VALIDATION
-    // =========================
-    if (
-      !items ||
-      !Array.isArray(items) ||
-      items.length === 0
-    ) {
-      return res.status(400).json({
-        error: "No items provided",
-      });
-    }
+      const session =
+        await stripe.checkout.sessions.create({
+          payment_method_types: ["card"],
 
-    // =========================
-    // CREATE STRIPE LINE ITEMS
-    // =========================
-    const lineItems = items.map((item) => ({
-      price_data: {
-        currency: "usd",
+          line_items: [
+            {
+              price_data: {
+                currency: "usd",
 
-        product_data: {
-          name: item.name,
-          description:
-            item.description ||
-            "ShopLink Product",
-          images: Array.isArray(item.image)
-            ? item.image
-            : [item.image],
-        },
+                product_data: {
+                  name: product.name,
+                },
 
-        unit_amount: Math.round(
-          Number(item.price) * 100
-        ),
-      },
+                unit_amount:
+                  Number(product.price) * 100,
+              },
 
-      quantity: item.qty || 1,
-    }));
+              quantity: 1,
+            },
+          ],
 
-    // =========================
-    // STRIPE SESSION
-    // =========================
-    const session =
-      await stripe.checkout.sessions.create({
-        payment_method_types: ["card"],
+          mode: "payment",
 
-        mode: "payment",
+          success_url:
+            "https://shoplink-frontend.vercel.app/success",
 
-        line_items: lineItems,
+          cancel_url:
+            "https://shoplink-frontend.vercel.app/cancel",
+        });
 
-        success_url:
-          "https://shoplink-frontend-snowy.vercel.app/success",
-
-        cancel_url:
-          "https://shoplink-frontend-snowy.vercel.app",
-      });
-
-    // =========================
-    // SAVE ORDERS
-    // =========================
-    for (const item of items) {
+      // save order
       await Order.create({
-  productId: item._id,
+        productId: product._id,
 
-  userId: req.user?.userId,
+        userId: req.user.userId,
 
-  userEmail:
-    req.body.userEmail || "guest",
+        userEmail:
+          userEmail || "",
 
-  paymentMethod: "stripe",
+        stripeSessionId:
+          session.id,
 
-  stripeSessionId: session.id,
+        paymentStatus: "pending",
 
-  paymentStatus: "pending",
+        status: "processing",
+      });
 
-  status: "processing",
-});
+      res.json({
+        url: session.url,
+      });
+    } catch (err) {
+      console.log(err);
+
+      res.status(500).json({
+        error: "Checkout failed",
+      });
     }
-
-    // =========================
-    // RETURN URL
-    // =========================
-    res.json({
-      url: session.url,
-    });
-
-  } catch (err) {
-    console.error("CHECKOUT ERROR:", err);
-
-    res.status(500).json({
-      error: "Checkout failed",
-    });
   }
-});
+);
 
 export default router;
