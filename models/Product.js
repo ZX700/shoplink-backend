@@ -15,8 +15,9 @@ const productSchema = new mongoose.Schema(
       required: true,
     },
 
+    // FIXED
     image: {
-      type: [String],
+      type: String,
       required: true,
     },
 
@@ -63,14 +64,13 @@ const productSchema = new mongoose.Schema(
       default: "",
     },
 
-    // IMPORTANT
     phoneNumber: {
       type: String,
       default: "",
     },
 
     // =========================
-    // EXTRA
+    // REVIEWS
     // =========================
     reviews: [
       {
@@ -80,11 +80,17 @@ const productSchema = new mongoose.Schema(
       },
     ],
 
+    // =========================
+    // STOCK
+    // =========================
     stock: {
       type: Number,
       default: 1,
     },
 
+    // =========================
+    // PRODUCT STATUS
+    // =========================
     status: {
       type: String,
       default: "active",
