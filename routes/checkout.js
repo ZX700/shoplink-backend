@@ -9,16 +9,13 @@ const stripe = new Stripe(
 );
 
 // =========================
-// STRIPE CHECKOUT
+// CHECKOUT
 // =========================
 router.post("/", async (req, res) => {
   try {
     const { items } = req.body;
 
-    console.log(
-      "CHECKOUT REQUEST:",
-      req.body
-    );
+    console.log("CHECKOUT BODY:", req.body);
 
     // =========================
     // VALIDATION
@@ -34,40 +31,37 @@ router.post("/", async (req, res) => {
     }
 
     // =========================
-    // STRIPE LINE ITEMS
+    // STRIPE ITEMS
     // =========================
-    const line_items = items.map(
-      (item) => ({
-        price_data: {
-          currency: "usd",
+    const line_items = items.map((item) => ({
+      price_data: {
+        currency: "usd",
 
-          product_data: {
-            name: item.name,
-            description:
-              item.description ||
-              "ShopLink Product",
-            images: item.image
-              ? [item.image]
-              : [],
-          },
+        product_data: {
+          name: item.name,
+          description:
+            item.description ||
+            "ShopLink Product",
 
-          unit_amount: Math.round(
-            Number(item.price) * 100
-          ),
+          images: item.image
+            ? [item.image]
+            : [],
         },
 
-        quantity: item.qty || 1,
-      })
-    );
+        unit_amount: Math.round(
+          item.price * 100
+        ),
+      },
+
+      quantity: item.qty || 1,
+    }));
 
     // =========================
-    // CREATE SESSION
+    // CREATE STRIPE SESSION
     // =========================
     const session =
       await stripe.checkout.sessions.create({
-        payment_method_types: [
-          "card",
-        ],
+        payment_method_types: ["card"],
 
         mode: "payment",
 
@@ -83,34 +77,21 @@ router.post("/", async (req, res) => {
     // =========================
     // SAVE ORDER
     // =========================
-    for (const item of items) {
-      await Order.create({
-        productId: item._id,
-        productName: item.name,
-        amount: item.price,
-        quantity: item.qty || 1,
-
-        paymentMethod: "stripe",
-
-        stripeSessionId:
-          session.id,
-
-        paymentStatus: "pending",
-      });
-    }
+    await Order.create({
+      items,
+      stripeSessionId: session.id,
+      paymentStatus: "pending",
+    });
 
     // =========================
-    // RETURN URL
+    // RESPONSE
     // =========================
     res.json({
       url: session.url,
     });
 
   } catch (err) {
-    console.error(
-      "CHECKOUT ERROR:",
-      err
-    );
+    console.error("CHECKOUT ERROR:", err);
 
     res.status(500).json({
       error: "Checkout failed",
