@@ -1,5 +1,6 @@
 import express from "express";
 import Stripe from "stripe";
+import { authMiddleware } from "../middleware/auth.js";
 import Order from "../models/Order.js";
 
 const router = express.Router();
@@ -8,10 +9,15 @@ const stripe = new Stripe(
   process.env.STRIPE_SECRET_KEY
 );
 
+//
 // =========================
-// CHECKOUT
+// STRIPE CHECKOUT
 // =========================
-router.post("/", async (req, res) => {
+//
+router.post(
+  "/",
+  authMiddleware,
+  async (req, res) => {
   try {
     const { items } = req.body;
 
@@ -31,9 +37,9 @@ router.post("/", async (req, res) => {
     }
 
     // =========================
-    // STRIPE ITEMS
+    // CREATE STRIPE LINE ITEMS
     // =========================
-    const line_items = items.map((item) => ({
+    const lineItems = items.map((item) => ({
       price_data: {
         currency: "usd",
 
@@ -42,14 +48,13 @@ router.post("/", async (req, res) => {
           description:
             item.description ||
             "ShopLink Product",
-
-          images: item.image
-            ? [item.image]
-            : [],
+          images: Array.isArray(item.image)
+            ? item.image
+            : [item.image],
         },
 
         unit_amount: Math.round(
-          item.price * 100
+          Number(item.price) * 100
         ),
       },
 
@@ -57,7 +62,7 @@ router.post("/", async (req, res) => {
     }));
 
     // =========================
-    // CREATE STRIPE SESSION
+    // STRIPE SESSION
     // =========================
     const session =
       await stripe.checkout.sessions.create({
@@ -65,7 +70,7 @@ router.post("/", async (req, res) => {
 
         mode: "payment",
 
-        line_items,
+        line_items: lineItems,
 
         success_url:
           "https://shoplink-frontend-snowy.vercel.app/success",
@@ -75,16 +80,29 @@ router.post("/", async (req, res) => {
       });
 
     // =========================
-    // SAVE ORDER
+    // SAVE ORDERS
     // =========================
-    await Order.create({
-      items,
-      stripeSessionId: session.id,
-      paymentStatus: "pending",
-    });
+    for (const item of items) {
+      await Order.create({
+  productId: item._id,
+
+  userId: req.user?.userId,
+
+  userEmail:
+    req.body.userEmail || "guest",
+
+  paymentMethod: "stripe",
+
+  stripeSessionId: session.id,
+
+  paymentStatus: "pending",
+
+  status: "processing",
+});
+    }
 
     // =========================
-    // RESPONSE
+    // RETURN URL
     // =========================
     res.json({
       url: session.url,

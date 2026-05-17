@@ -1,31 +1,48 @@
-import express from "express";
-import Order from "../models/Order.js";
-import { authMiddleware } from "../middleware/auth.js";
+import mongoose from "mongoose";
 
-const router = express.Router();
+const orderSchema = new mongoose.Schema(
+  {
+    productId: {
+      type: String,
+      default: "",
+    },
 
-router.get(
-  "/my-orders",
-  authMiddleware,
-  async (req, res) => {
-    try {
-      const orders =
-        await Order.find({
-          userId:
-            req.user.userId,
-        }).sort({
-          createdAt: -1,
-        });
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
 
-      res.json(orders);
-    } catch (err) {
-      console.log(err);
+    userEmail: {
+      type: String,
+      default: "",
+    },
 
-      res.status(500).json({
-        error: "Server error",
-      });
-    }
+    paymentMethod: {
+      type: String,
+      default: "stripe",
+    },
+
+    stripeSessionId: {
+      type: String,
+      default: "",
+    },
+
+    paymentStatus: {
+      type: String,
+      default: "pending",
+    },
+
+    status: {
+      type: String,
+      default: "processing",
+    },
+  },
+  {
+    timestamps: true,
   }
 );
 
-export default router;
+export default mongoose.model(
+  "Order",
+  orderSchema
+);
